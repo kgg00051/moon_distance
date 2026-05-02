@@ -3,11 +3,12 @@ from __future__ import annotations
 import calendar
 from collections.abc import Sequence
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from pathlib import Path
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 try:
+    from skyfield import almanac
     from skyfield.api import Loader
 except ModuleNotFoundError as exc:
     raise SystemExit(
@@ -119,6 +120,64 @@ def calculate_daily_moon_distance(
     ]
 
 
+def find_full_moon_distances(
+    year: int,
+    month: int | None = None,
+    *,
+    timezone_name: str = "UTC",
+    data_dir: Path = DEFAULT_DATA_DIR,
+    ephemeris_name: str = DEFAULT_EPHEMERIS,
+) -> list[DailyDistance]:
+    validate_date_components(year, month, sample_hour=0, sample_minute=0)
+
+    try:
+        local_timezone = ZoneInfo(timezone_name)
+    except ZoneInfoNotFoundError as exc:
+        raise ValueError(f"unknown timezone: {timezone_name}") from exc
+
+    period_start_local = datetime(year, month or 1, 1, tzinfo=local_timezone)
+    if month is None:
+        period_end_local = datetime(year + 1, 1, 1, tzinfo=local_timezone)
+    else:
+        next_year = year + 1 if month == 12 else year
+        next_month = 1 if month == 12 else month + 1
+        period_end_local = datetime(next_year, next_month, 1, tzinfo=local_timezone)
+
+    loader = Loader(str(data_dir), verbose=False, expire=False)
+    ts = loader.timescale()
+    planets = loader(ephemeris_name)
+
+    t0 = ts.from_datetime(period_start_local.astimezone(timezone.utc))
+    t1 = ts.from_datetime(period_end_local.astimezone(timezone.utc))
+    times, phases = almanac.find_discrete(t0, t1, almanac.moon_phases(planets))
+
+    earth = planets["earth"]
+    moon = planets["moon"]
+    records: list[DailyDistance] = []
+
+    for time, phase in zip(times, phases):
+        if int(phase) != 2:
+            continue
+
+        sampled_at_utc = time.utc_datetime()
+        if sampled_at_utc.tzinfo is None:
+            sampled_at_utc = sampled_at_utc.replace(tzinfo=timezone.utc)
+        sampled_at_local = sampled_at_utc.astimezone(local_timezone)
+
+        if not (period_start_local <= sampled_at_local < period_end_local):
+            continue
+
+        records.append(
+            DailyDistance(
+                local_date=sampled_at_local.date(),
+                sampled_at=sampled_at_local,
+                distance_km=float((moon - earth).at(time).distance().km),
+            )
+        )
+
+    return records
+
+
 def extract_plot_data(
     records: Sequence[DailyDistance],
 ) -> tuple[list[datetime], list[float]]:
@@ -127,12 +186,3 @@ def extract_plot_data(
         [record.distance_km for record in records],
     )
 
-
-def find_distance_extrema(records: Sequence[DailyDistance]) -> DistanceExtrema:
-    if not records:
-        raise ValueError("records must not be empty")
-
-    return DistanceExtrema(
-        minimum=min(records, key=lambda record: record.distance_km),
-        maximum=max(records, key=lambda record: record.distance_km),
-    )

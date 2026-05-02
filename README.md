@@ -9,14 +9,14 @@
 - 月未指定なら 1 年分の日次距離をまとめて計算する
 - 日付の解釈はタイムゾーン付き `datetime` で扱う
 - 計算モジュールと CLI を分離し、`matplotlib` で PNG グラフも生成する
-- 計算期間内の最大距離日と最小距離日を求め、グラフ上に注釈表示する
+- 計算期間内の満月時刻を天文計算で求め、距離をグラフ上に重ねて表示する
 
 ## 実装の責務分離
 
 - `build_local_datetimes()`: 対象月または対象年の日付配列を作る
 - `calculate_daily_moon_distance()`: 対象月または対象年のエフェメリス読み込みと距離計算を行う
+- `find_full_moon_distances()`: 対象期間内の満月時刻を抽出し、その時刻の距離を計算する
 - `extract_plot_data()`: 描画用にサンプル時刻配列と距離配列を取り出す
-- `find_distance_extrema()`: 計算期間内の最大距離日と最小距離日を求める
 - `main.py`: CLI 引数を受け取り、CSV 出力とグラフ保存を行う
 
 ## 使い方
@@ -34,6 +34,12 @@ python main.py 2026 --timezone Asia/Tokyo --hour 0 --minute 0
 ```
 
 既定では CSV を標準出力に出しつつ、グラフ画像を `output/moon_distance_2026_05.png` や `output/moon_distance_2026.png` に保存します。グラフ上には、計算期間内で距離が最大の日と最小の日がマーカーと注釈で追加されます。
+
+満月時刻の距離も同じグラフに星形マーカーと注釈で重ねて表示されます。表示しない場合は次のオプションを指定します。
+
+```bash
+python main.py 2026 5 --no-full-moon
+```
 
 ```bash
 python main.py 2026 5 --plot-output charts/may-2026.png

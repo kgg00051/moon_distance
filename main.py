@@ -11,7 +11,7 @@ from moon_distance import (
     DailyDistance,
     calculate_daily_moon_distance,
     extract_plot_data,
-    find_distance_extrema,
+    find_full_moon_distances,
 )
 
 DEFAULT_OUTPUT_DIR = Path(__file__).resolve().parent / "output"
@@ -75,6 +75,11 @@ def build_argument_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="matplotlib によるグラフ出力を行わない",
     )
+    parser.add_argument(
+        "--no-full-moon",
+        action="store_true",
+        help="グラフ上の満月マーカーと注釈を表示しない",
+    )
     return parser
 
 
@@ -113,8 +118,10 @@ def build_annotation_position(
     place_above: bool,
 ) -> tuple[tuple[int, int], str, str]:
     midpoint = records[0].sampled_at + (records[-1].sampled_at - records[0].sampled_at) / 2
-    x_offset = -12 if record.sampled_at >= midpoint else 12
-    y_offset = 12 if place_above else -32
+    #x_offset = -12 if record.sampled_at >= midpoint else 12
+    x_offset = 12
+    #y_offset = 12 if place_above else -32
+    y_offset = 12 if place_above else -40
     horizontal_alignment = "right" if x_offset < 0 else "left"
     vertical_alignment = "bottom" if y_offset > 0 else "top"
     return (x_offset, y_offset), horizontal_alignment, vertical_alignment
@@ -136,6 +143,7 @@ def plot_records(
     month: int | None,
     output_path: Path,
     show_plot: bool,
+    full_moon_records: list[DailyDistance] | None = None,
 ) -> Path:
     configure_matplotlib()
 
@@ -153,74 +161,55 @@ def plot_records(
     import matplotlib.pyplot as plt
 
     sampled_at, distance_km = extract_plot_data(records)
-    extrema = find_distance_extrema(records)
-    maximum_offset, maximum_ha, maximum_va = build_annotation_position(
-        records,
-        extrema.maximum,
-        place_above=True,
-    )
-    minimum_offset, minimum_ha, minimum_va = build_annotation_position(
-        records,
-        extrema.minimum,
-        place_above=False,
-    )
     resolved_output_path = output_path.expanduser()
     resolved_output_path.parent.mkdir(parents=True, exist_ok=True)
 
-    fig, ax = plt.subplots(figsize=(12, 6))
+    fig, ax = plt.subplots(figsize=(10, 6))
     ax.plot(sampled_at, distance_km, color="#1f5aa6", linewidth=2.0)
     ax.fill_between(sampled_at, distance_km, color="#8bb8e8", alpha=0.25)
-    ax.set_title(build_plot_title(year, month))
+    ax.set_title(build_plot_title(year, month), y=-0.2)
     ax.set_xlabel("Date")
     ax.set_ylabel("Distance (km)")
+    ax.set_ylim(0, 500000)
     ax.grid(True, color="#d7dce2", linewidth=0.8)
 
-    ax.scatter(
-        [extrema.maximum.sampled_at],
-        [extrema.maximum.distance_km],
-        color="#d9480f",
-        s=70,
-        zorder=3,
-        label="Maximum",
-    )
-    ax.scatter(
-        [extrema.minimum.sampled_at],
-        [extrema.minimum.distance_km],
-        color="#2b8a3e",
-        s=70,
-        zorder=3,
-        label="Minimum",
-    )
-    ax.annotate(
-        build_extrema_label("Maximum", extrema.maximum),
-        xy=(extrema.maximum.sampled_at, extrema.maximum.distance_km),
-        xytext=maximum_offset,
-        textcoords="offset points",
-        ha=maximum_ha,
-        va=maximum_va,
-        color="#d9480f",
-        fontsize=9,
-        bbox={"boxstyle": "round,pad=0.3", "fc": "#fff4e6", "ec": "#f08c00"},
-        arrowprops={"arrowstyle": "->", "color": "#f08c00", "lw": 1.0},
-    )
-    ax.annotate(
-        build_extrema_label("Minimum", extrema.minimum),
-        xy=(extrema.minimum.sampled_at, extrema.minimum.distance_km),
-        xytext=minimum_offset,
-        textcoords="offset points",
-        ha=minimum_ha,
-        va=minimum_va,
-        color="#2b8a3e",
-        fontsize=9,
-        bbox={"boxstyle": "round,pad=0.3", "fc": "#ebfbee", "ec": "#40c057"},
-        arrowprops={"arrowstyle": "->", "color": "#37b24d", "lw": 1.0},
-    )
+    if full_moon_records:
+        full_moon_sampled_at, full_moon_distance_km = extract_plot_data(full_moon_records)
+        ax.scatter(
+            full_moon_sampled_at,
+            full_moon_distance_km,
+            color="#5f3dc4",
+            edgecolors="white",
+            linewidths=0.8,
+            marker="*",
+            s=160,
+            zorder=4,
+            label="Full Moon",
+        )
+        for index, record in enumerate(full_moon_records):
+            offset, horizontal_alignment, vertical_alignment = build_annotation_position(
+                records,
+                record,
+                place_above=(index % 2 == 0),
+            )
+            ax.annotate(
+                build_extrema_label("Full Moon", record),
+                xy=(record.sampled_at, record.distance_km),
+                xytext=offset,
+                textcoords="offset points",
+                ha=horizontal_alignment,
+                va=vertical_alignment,
+                color="#5f3dc4",
+                fontsize=9,
+                bbox={"boxstyle": "round,pad=0.3", "fc": "#f3f0ff", "ec": "#7950f2"},
+                arrowprops={"arrowstyle": "->", "color": "#7950f2", "lw": 1.0},
+            )
 
     locator = mdates.AutoDateLocator()
     formatter = mdates.ConciseDateFormatter(locator)
     ax.xaxis.set_major_locator(locator)
     ax.xaxis.set_major_formatter(formatter)
-    ax.legend(loc="upper right")
+    ax.legend(loc="lower right")
 
     fig.tight_layout()
     fig.savefig(resolved_output_path, dpi=150)
@@ -254,6 +243,19 @@ def main() -> None:
     except ValueError as exc:
         parser.error(str(exc))
 
+    full_moon_records: list[DailyDistance] = []
+    if not args.no_plot and not args.no_full_moon:
+        try:
+            full_moon_records = find_full_moon_distances(
+                args.year,
+                args.month,
+                timezone_name=args.timezone,
+                data_dir=args.data_dir,
+                ephemeris_name=args.ephemeris,
+            )
+        except ValueError as exc:
+            parser.error(str(exc))
+
     print_csv(records)
 
     if not args.no_plot:
@@ -264,6 +266,7 @@ def main() -> None:
             month=args.month,
             output_path=output_path,
             show_plot=args.show_plot,
+            full_moon_records=full_moon_records,
         )
         print(f"Plot saved to {saved_path}", file=sys.stderr)
 
