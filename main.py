@@ -13,10 +13,16 @@ from moon_distance import (
 
 def build_argument_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="指定した年月の地球-月距離を1日ごとに計算します。"
+        description="指定した年、または年月の地球-月距離を1日ごとに計算します。"
     )
     parser.add_argument("year", type=int, help="対象年")
-    parser.add_argument("month", type=int, help="対象月")
+    parser.add_argument(
+        "month",
+        type=int,
+        nargs="?",
+        default=None,
+        help="対象月。省略時は1年分を計算",
+    )
     parser.add_argument(
         "--timezone",
         default="UTC",

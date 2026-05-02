@@ -27,13 +27,13 @@ class DailyDistance:
 
 def validate_date_components(
     year: int,
-    month: int,
+    month: int | None,
     sample_hour: int,
     sample_minute: int,
 ) -> None:
     if year < 1:
         raise ValueError("year must be 1 or greater")
-    if not 1 <= month <= 12:
+    if month is not None and not 1 <= month <= 12:
         raise ValueError("month must be between 1 and 12")
     if not 0 <= sample_hour <= 23:
         raise ValueError("sample_hour must be between 0 and 23")
@@ -43,7 +43,7 @@ def validate_date_components(
 
 def build_local_datetimes(
     year: int,
-    month: int,
+    month: int | None,
     timezone_name: str,
     sample_hour: int = 0,
     sample_minute: int = 0,
@@ -55,23 +55,29 @@ def build_local_datetimes(
     except ZoneInfoNotFoundError as exc:
         raise ValueError(f"unknown timezone: {timezone_name}") from exc
 
-    _, last_day = calendar.monthrange(year, month)
-    return [
-        datetime(
-            year=year,
-            month=month,
-            day=day,
-            hour=sample_hour,
-            minute=sample_minute,
-            tzinfo=timezone,
+    target_months = range(1, 13) if month is None else (month,)
+    sample_datetimes: list[datetime] = []
+
+    for target_month in target_months:
+        _, last_day = calendar.monthrange(year, target_month)
+        sample_datetimes.extend(
+            datetime(
+                year=year,
+                month=target_month,
+                day=day,
+                hour=sample_hour,
+                minute=sample_minute,
+                tzinfo=timezone,
+            )
+            for day in range(1, last_day + 1)
         )
-        for day in range(1, last_day + 1)
-    ]
+
+    return sample_datetimes
 
 
 def calculate_daily_moon_distance(
     year: int,
-    month: int,
+    month: int | None = None,
     *,
     timezone_name: str = "UTC",
     sample_hour: int = 0,
