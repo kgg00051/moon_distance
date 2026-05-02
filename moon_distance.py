@@ -25,6 +25,12 @@ class DailyDistance:
     distance_km: float
 
 
+@dataclass(frozen=True)
+class DistanceExtrema:
+    minimum: DailyDistance
+    maximum: DailyDistance
+
+
 def validate_date_components(
     year: int,
     month: int | None,
@@ -119,4 +125,14 @@ def extract_plot_data(
     return (
         [record.sampled_at for record in records],
         [record.distance_km for record in records],
+    )
+
+
+def find_distance_extrema(records: Sequence[DailyDistance]) -> DistanceExtrema:
+    if not records:
+        raise ValueError("records must not be empty")
+
+    return DistanceExtrema(
+        minimum=min(records, key=lambda record: record.distance_km),
+        maximum=max(records, key=lambda record: record.distance_km),
     )

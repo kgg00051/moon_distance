@@ -11,6 +11,7 @@ from moon_distance import (
     DailyDistance,
     calculate_daily_moon_distance,
     extract_plot_data,
+    find_distance_extrema,
 )
 
 DEFAULT_OUTPUT_DIR = Path(__file__).resolve().parent / "output"
@@ -97,6 +98,28 @@ def build_plot_title(year: int, month: int | None) -> str:
     return f"Moon-Earth Distance ({period})"
 
 
+def build_extrema_label(label: str, record: DailyDistance) -> str:
+    return (
+        f"{label}\n"
+        f"{record.local_date.isoformat()}\n"
+        f"{record.distance_km:,.0f} km"
+    )
+
+
+def build_annotation_position(
+    records: list[DailyDistance],
+    record: DailyDistance,
+    *,
+    place_above: bool,
+) -> tuple[tuple[int, int], str, str]:
+    midpoint = records[0].sampled_at + (records[-1].sampled_at - records[0].sampled_at) / 2
+    x_offset = -12 if record.sampled_at >= midpoint else 12
+    y_offset = 12 if place_above else -32
+    horizontal_alignment = "right" if x_offset < 0 else "left"
+    vertical_alignment = "bottom" if y_offset > 0 else "top"
+    return (x_offset, y_offset), horizontal_alignment, vertical_alignment
+
+
 def configure_matplotlib() -> None:
     if "XDG_CACHE_HOME" not in os.environ:
         DEFAULT_CACHE_DIR.mkdir(parents=True, exist_ok=True)
@@ -130,6 +153,17 @@ def plot_records(
     import matplotlib.pyplot as plt
 
     sampled_at, distance_km = extract_plot_data(records)
+    extrema = find_distance_extrema(records)
+    maximum_offset, maximum_ha, maximum_va = build_annotation_position(
+        records,
+        extrema.maximum,
+        place_above=True,
+    )
+    minimum_offset, minimum_ha, minimum_va = build_annotation_position(
+        records,
+        extrema.minimum,
+        place_above=False,
+    )
     resolved_output_path = output_path.expanduser()
     resolved_output_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -141,10 +175,52 @@ def plot_records(
     ax.set_ylabel("Distance (km)")
     ax.grid(True, color="#d7dce2", linewidth=0.8)
 
+    ax.scatter(
+        [extrema.maximum.sampled_at],
+        [extrema.maximum.distance_km],
+        color="#d9480f",
+        s=70,
+        zorder=3,
+        label="Maximum",
+    )
+    ax.scatter(
+        [extrema.minimum.sampled_at],
+        [extrema.minimum.distance_km],
+        color="#2b8a3e",
+        s=70,
+        zorder=3,
+        label="Minimum",
+    )
+    ax.annotate(
+        build_extrema_label("Maximum", extrema.maximum),
+        xy=(extrema.maximum.sampled_at, extrema.maximum.distance_km),
+        xytext=maximum_offset,
+        textcoords="offset points",
+        ha=maximum_ha,
+        va=maximum_va,
+        color="#d9480f",
+        fontsize=9,
+        bbox={"boxstyle": "round,pad=0.3", "fc": "#fff4e6", "ec": "#f08c00"},
+        arrowprops={"arrowstyle": "->", "color": "#f08c00", "lw": 1.0},
+    )
+    ax.annotate(
+        build_extrema_label("Minimum", extrema.minimum),
+        xy=(extrema.minimum.sampled_at, extrema.minimum.distance_km),
+        xytext=minimum_offset,
+        textcoords="offset points",
+        ha=minimum_ha,
+        va=minimum_va,
+        color="#2b8a3e",
+        fontsize=9,
+        bbox={"boxstyle": "round,pad=0.3", "fc": "#ebfbee", "ec": "#40c057"},
+        arrowprops={"arrowstyle": "->", "color": "#37b24d", "lw": 1.0},
+    )
+
     locator = mdates.AutoDateLocator()
     formatter = mdates.ConciseDateFormatter(locator)
     ax.xaxis.set_major_locator(locator)
     ax.xaxis.set_major_formatter(formatter)
+    ax.legend(loc="upper right")
 
     fig.tight_layout()
     fig.savefig(resolved_output_path, dpi=150)
