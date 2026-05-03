@@ -7,13 +7,8 @@ from datetime import date, datetime, timezone
 from pathlib import Path
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-try:
-    from skyfield import almanac
-    from skyfield.api import Loader
-except ModuleNotFoundError as exc:
-    raise SystemExit(
-        "skyfield is required. Install dependencies with `pip install -r requirements.txt`."
-    ) from exc
+from skyfield import almanac
+from skyfield.api import Loader
 
 DEFAULT_DATA_DIR = Path(__file__).resolve().parent / "data"
 DEFAULT_EPHEMERIS = "de421.bsp"

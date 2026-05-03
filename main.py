@@ -147,12 +147,7 @@ def plot_records(
 ) -> Path:
     configure_matplotlib()
 
-    try:
-        import matplotlib
-    except ModuleNotFoundError as exc:
-        raise SystemExit(
-            "matplotlib is required. Install dependencies with `pip install -r requirements.txt`."
-        ) from exc
+    import matplotlib
 
     if not show_plot:
         matplotlib.use("Agg")
